@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tempest, explained</title>
+<meta name="description" content="Why the Schaffer Replica Storm circuit gives such a controlled, squishy crunch: its history, how the optical limiter and LM386 work together, and what every control on Tempest does.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;900&family=Big+Shoulders+Text:wght@500;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #e8ebee;
+  --paper-deep: #dde1e5;
+  --ink: #15202b;
+  --ink-soft: #4a5866;
+  --rule: #c3cad1;
+  --opto: #e2380f;
+  --opto-glow: #ff6a3d;
+  --volt: #1c64d8;
+  --scope-bg: #15202b;
+  --scope-ink: #dfe6ec;
+  --scope-grid: #2a3947;
+  --display: "Big Shoulders Display", "Avenir Next Condensed", sans-serif;
+  --label: "Big Shoulders Text", "Avenir Next Condensed", sans-serif;
+  --body: "Source Serif 4", Georgia, serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131c25;
+    --paper-deep: #19242f;
+    --ink: #e4e9ee;
+    --ink-soft: #9aa8b5;
+    --rule: #2c3a48;
+    --opto: #ff5a2e;
+    --opto-glow: #ff7a52;
+    --volt: #5b9bff;
+    --scope-bg: #0c131a;
+    --scope-grid: #22303d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #131c25; --paper-deep: #19242f; --ink: #e4e9ee; --ink-soft: #9aa8b5; --rule: #2c3a48;
+  --opto: #ff5a2e; --opto-glow: #ff7a52; --volt: #5b9bff; --scope-bg: #0c131a; --scope-grid: #22303d;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  font-optical-sizing: auto;
+}
+a { color: inherit; text-decoration-color: var(--volt); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--volt); outline-offset: 3px; border-radius: 2px;
+}
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.measure { max-width: 66ch; }
+
+/* ---------- Hero ---------- */
+.hero { padding: 72px 0 40px; }
+.hero h1 {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(3.4rem, 10vw, 8.6rem);
+  line-height: 0.86;
+  letter-spacing: -0.01em;
+  margin: 0 0 28px;
+  max-width: 11ch;
+  text-wrap: balance;
+}
+.hero .lede { font-size: 1.3rem; line-height: 1.5; color: var(--ink-soft); margin: 0; max-width: 46ch; }
+
+/* ---------- Scope (the centrepiece) ---------- */
+.rig {
+  margin: 48px 0 0;
+  background: var(--scope-bg);
+  color: var(--scope-ink);
+  border-radius: 14px;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 24px;
+}
+.lanes { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.lane { position: relative; }
+.lane canvas { display: block; width: 100%; height: 108px; border-radius: 6px; background: rgba(255,255,255,0.02); }
+.lane.gr canvas { height: 72px; }
+.lane-name {
+  font-family: var(--label); font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em;
+  display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; color: #b9c5cf;
+}
+.lane-name b { font-weight: 700; color: var(--scope-ink); }
+.lane-name .num { font-variant-numeric: tabular-nums; color: #b9c5cf; }
+
+.panel { display: grid; gap: 18px; align-content: start; }
+.dial-row label {
+  display: flex; justify-content: space-between; font-family: var(--label); font-weight: 700;
+  font-size: 1.05rem; margin-bottom: 2px;
+}
+.dial-row output { font-variant-numeric: tabular-nums; color: #b9c5cf; }
+input[type=range] { width: 100%; accent-color: var(--opto-glow); height: 28px; }
+.lamp-row { display: flex; gap: 18px; align-items: center; font-family: var(--label); font-size: 0.95rem; color: #b9c5cf; }
+.lamp { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #8d99a4; background: #2a1310; flex: none; }
+.lamp.clip { background: #0f1d33; }
+.lamp-row span { display: flex; gap: 8px; align-items: center; }
+.listen { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.listen button {
+  font-family: var(--label); font-weight: 700; font-size: 1rem;
+  padding: 10px 8px; border-radius: 8px; border: 1px solid #3c4d5d; background: #1e2c39; color: var(--scope-ink); cursor: pointer;
+}
+.listen button:hover { background: #26384a; }
+.listen button[aria-pressed="true"] { background: var(--opto); border-color: var(--opto); color: #fff; }
+.rig-note { font-size: 0.85rem; line-height: 1.45; color: #9fb0be; margin: 0; }
+.curve svg { width: 100%; height: auto; display: block; }
+
+/* ---------- Sections ---------- */
+section { padding: 88px 0 0; }
+h2 {
+  font-family: var(--display); font-weight: 900; font-size: clamp(2.4rem, 5.5vw, 3.8rem);
+  line-height: 0.95; margin: 0 0 24px; max-width: 18ch; text-wrap: balance;
+}
+h3 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; line-height: 1.05; margin: 0 0 8px; }
+p { margin: 0 0 1em; }
+.aside { color: var(--ink-soft); font-size: 1rem; }
+
+/* History timeline: a real sequence, so it gets years down the side */
+.timeline { list-style: none; padding: 0; margin: 40px 0 0; display: grid; gap: 0; }
+.timeline li { display: grid; grid-template-columns: 7.5rem 1fr; gap: 24px; padding: 22px 0; border-top: 1px solid var(--rule); }
+.timeline .year { font-family: var(--display); font-weight: 900; font-size: 2.3rem; line-height: 1; color: var(--opto); }
+.timeline p { margin: 0; max-width: 62ch; }
+blockquote {
+  margin: 40px 0 0; padding: 0 0 0 24px; border-left: 4px solid var(--opto);
+  font-size: 1.5rem; line-height: 1.4; font-style: italic; max-width: 40ch;
+}
+blockquote cite { display: block; margin-top: 10px; font-style: normal; font-size: 1rem; color: var(--ink-soft); }
+
+/* Signal path */
+.path { margin: 36px 0 0; overflow-x: auto; }
+.path svg { min-width: 760px; width: 100%; height: auto; display: block; }
+.path text { font-family: var(--label); fill: var(--ink); }
+.path .sub { fill: var(--ink-soft); font-weight: 500; }
+
+/* Why it works: a sequence of what happens to one note */
+.beats { margin: 40px 0 0; display: grid; gap: 48px; }
+.beat { display: grid; grid-template-columns: 220px 1fr; gap: 32px; align-items: start; }
+.beat figure { margin: 0; }
+.beat svg { width: 100%; height: auto; display: block; }
+.beat p { max-width: 62ch; }
+.beat .t { font-family: var(--label); font-weight: 700; font-size: 1rem; color: var(--ink-soft); margin-bottom: 4px; }
+
+/* Controls */
+.controls { margin: 32px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+.control { padding: 26px 0; border-top: 1px solid var(--rule); }
+.control h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.control h3 small { font-family: var(--label); font-weight: 500; font-size: 1rem; color: var(--ink-soft); }
+.control dl { margin: 10px 0 0; display: grid; grid-template-columns: 7.5rem 1fr; gap: 6px 14px; font-size: 1rem; }
+.control dt { font-family: var(--label); font-weight: 700; color: var(--ink-soft); padding-top: 2px; }
+.control dd { margin: 0; }
+.board-head { margin-top: 64px; }
+
+/* Recipes */
+.recipes { margin: 32px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.recipe { background: var(--paper-deep); border-radius: 10px; padding: 22px; }
+.recipe h3 { font-size: 1.5rem; }
+.settings { display: flex; gap: 14px; font-family: var(--label); font-weight: 700; font-size: 1.05rem; margin: 6px 0 12px; flex-wrap: wrap; }
+.settings span { font-variant-numeric: tabular-nums; }
+.recipe p { font-size: 1rem; margin: 0; }
+.recipe button {
+  margin-top: 14px; font-family: var(--label); font-weight: 700; font-size: 1rem; padding: 8px 12px; border-radius: 6px;
+  border: 1px solid var(--ink); background: transparent; color: var(--ink); cursor: pointer;
+}
+.recipe button:hover { background: var(--ink); color: var(--paper); }
+
+footer.wrap { margin-top: 112px; padding-top: 32px; padding-bottom: 64px; border-top: 1px solid var(--rule); font-size: 0.95rem; color: var(--ink-soft); }
+footer ul { padding-left: 1.1em; margin: 8px 0 20px; }
+footer h2 { font-size: 1.8rem; color: var(--ink); }
+
+@media (max-width: 860px) {
+  .rig { grid-template-columns: 1fr; padding: 16px; }
+  .beat { grid-template-columns: 1fr; gap: 12px; }
+  .beat figure { max-width: 320px; }
+  .controls { grid-template-columns: 1fr; }
+  .recipes { grid-template-columns: 1fr; }
+  .timeline li { grid-template-columns: 1fr; gap: 6px; }
+}
+@media (max-width: 480px) {
+  .wrap { padding: 0 16px; }
+  .hero { padding-top: 48px; }
+  .control dl { grid-template-columns: 1fr; gap: 2px; }
+  .control dd { margin-bottom: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <h1>The squash that came out of a radio</h1>
+  <p class="lede">Angus Young's crunch was shaped by a 1970s wireless transmitter that was never meant to touch his tone. The Storm pedal, and Tempest after it, keep the useful accident: a boost with a light bulb inside it. Move the dials below and watch what it does to a riff.</p>
+
+  <div class="rig" id="rig">
+    <div class="lanes">
+      <div class="lane">
+        <div class="lane-name"><b>Your guitar, into the pedal</b><span class="num" id="crestIn"></span></div>
+        <canvas id="cvIn" aria-label="Waveform of the dry guitar riff"></canvas>
+      </div>
+      <div class="lane">
+        <div class="lane-name"><b>Out to the amp</b><span class="num" id="crestOut"></span></div>
+        <canvas id="cvOut" aria-label="Waveform of the riff after Tempest"></canvas>
+      </div>
+      <div class="lane gr">
+        <div class="lane-name"><b>How hard the light is pulling the gain down</b><span class="num" id="grMax"></span></div>
+        <canvas id="cvGr" aria-label="Gain reduction over time"></canvas>
+      </div>
+      <p class="rig-note">Both waveforms are scaled to the same height so you can compare their shape: how far the peaks stand above the sustain. The out lane is really 15 to 28 dB louder. The figure on the right of each is peak-to-average: lower means more even, more compressed.</p>
+    </div>
+
+    <div class="panel">
+      <div class="dial-row"><label for="kGain">Gain <output id="oGain">6.0</output></label><input type="range" id="kGain" min="0" max="10" step="0.1" value="6"></div>
+      <div class="dial-row"><label for="kLim">Limiter <output id="oLim">4.0</output></label><input type="range" id="kLim" min="0" max="10" step="0.1" value="4"></div>
+      <div class="dial-row"><label for="kBoost">Boost <output id="oBoost">3.5</output></label><input type="range" id="kBoost" min="0" max="10" step="0.1" value="3.5"></div>
+      <div class="lamp-row">
+        <span><i class="lamp" id="lampOpto" aria-hidden="true"></i>Opto <span id="optoTxt">0 dB</span></span>
+        <span><i class="lamp clip" id="lampClip" aria-hidden="true"></i>Clip</span>
+      </div>
+      <div class="curve" aria-label="Static curve: output level against input level">
+        <svg id="curve" viewBox="0 0 280 200" role="img"></svg>
+        <p class="rig-note">A held note at each level, Boost full. Solid: through the pedal. Dashed: the same gain with no limiting or clipping. Where they part is where the squeeze starts.</p>
+      </div>
+      <div class="listen">
+        <button type="button" id="playDry" aria-pressed="false">Play dry</button>
+        <button type="button" id="playWet" aria-pressed="false">Play through</button>
+      </div>
+      <p class="rig-note">This runs the same circuit model as the plugin, at a lower sample rate. Playback is straight out of the pedal with no amp, matched in loudness to the dry riff. The amp is where the real crunch happens.</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="history" aria-labelledby="h-history">
+  <h2 id="h-history">An accident on a stadium stage</h2>
+  <div class="measure">
+    <p>In the mid-1970s, Ken Schaffer built a wireless system so guitarists could leave the cable behind. Radio links of the day were noisy, so he did what tape machines did: squeezed the signal in the transmitter and expanded it back out in the receiver. That compander gave roughly 100 dB of dynamic range against about 70 for its rivals.</p>
+    <p>The two halves never quite cancelled. Fast pick attacks came out the far end shaped and pushed, and the receiver's output stage was strong enough to hit an amplifier hard. Players heard their guitar get tighter, louder and longer, and kept the pack on their belt for the sound.</p>
+  </div>
+
+  <ol class="timeline">
+    <li><span class="year">1976</span><p>The Schaffer-Vega Diversity System arrives: transmitter, receiver and a compander between them, with an optical limiter ahead of it in the transmitter.</p></li>
+    <li><span class="year">1977</span><p>Angus Young starts using it, from the Powerage era on. It boosts his Marshalls into the crunch that defines the records that follow.</p></li>
+    <li><span class="year">2010s</span><p>SoloDallas reverse-engineers the circuit with Ken Schaffer and releases the Schaffer Replica, a full-size unit with the compander and EQ.</p></li>
+    <li><span class="year">2016</span><p>The Storm puts the sound in a small pedal. The first version's knobs are Power, Storm and Snap.</p></li>
+    <li><span class="year">2019</span><p>Version 2 renames them Gain, Boost and Limiter. This is the unit DIY makers traced, and the one Tempest models.</p></li>
+    <li><span class="year">2026</span><p>A third version moves the jacks to the top and describes its boost as LM308-flavoured, which may mean a changed circuit.</p></li>
+  </ol>
+
+  <blockquote>"A compressor and an expander, like Dolby and DBX… also made a subtle difference in sound."<cite>Ken Schaffer, on the system he built</cite></blockquote>
+</section>
+
+<section id="inside" aria-labelledby="h-inside">
+  <h2 id="h-inside">What's actually in the box</h2>
+  <div class="measure">
+    <p>The marketing talks about companders and expanders, but a traced 2019 Storm is simpler than that, and the simplicity is the point. There are four stages, and the trick is how two of them talk to each other.</p>
+  </div>
+
+  <figure class="path">
+    <svg viewBox="0 0 980 250" role="img" aria-labelledby="pathTitle">
+      <title id="pathTitle">Signal path: Gain pot, op-amp stage with the light-dependent resistor in its feedback, LM386 clipping stage, Boost pot. A sidechain from the op-amp output drives an LED that shines on the resistor.</title>
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="2" style="color: var(--ink)">
+        <line x1="20" y1="80" x2="98" y2="80" marker-end="url(#arr)"/>
+        <line x1="242" y1="80" x2="318" y2="80" marker-end="url(#arr)"/>
+        <line x1="522" y1="80" x2="598" y2="80" marker-end="url(#arr)"/>
+        <line x1="762" y1="80" x2="838" y2="80" marker-end="url(#arr)"/>
+        <line x1="942" y1="80" x2="972" y2="80" marker-end="url(#arr)"/>
+        <rect x="100" y="40" width="140" height="80" rx="8"/>
+        <rect x="320" y="40" width="200" height="80" rx="8"/>
+        <rect x="600" y="40" width="160" height="80" rx="8" style="stroke: var(--volt)"/>
+        <rect x="840" y="40" width="100" height="80" rx="8"/>
+        <!-- sidechain loop -->
+        <path d="M480 120 V200 H360 V136" style="stroke: var(--opto)" marker-end="url(#arr)"/>
+      </g>
+      <circle cx="420" cy="200" r="12" style="fill: var(--opto)"/>
+      <text x="170" y="76" text-anchor="middle" font-size="22" font-weight="700">Gain</text>
+      <text x="170" y="100" text-anchor="middle" font-size="15" class="sub">input level</text>
+      <text x="420" y="76" text-anchor="middle" font-size="22" font-weight="700">Op-amp + light cell</text>
+      <text x="420" y="100" text-anchor="middle" font-size="15" class="sub">up to 8.5x, pulled down by light</text>
+      <text x="680" y="76" text-anchor="middle" font-size="22" font-weight="700" style="fill: var(--volt)">LM386</text>
+      <text x="680" y="100" text-anchor="middle" font-size="15" class="sub">20x, the stage that clips</text>
+      <text x="890" y="76" text-anchor="middle" font-size="22" font-weight="700">Boost</text>
+      <text x="890" y="100" text-anchor="middle" font-size="15" class="sub">output level</text>
+      <text x="420" y="236" text-anchor="middle" font-size="16" style="fill: var(--opto)" font-weight="700">sidechain: Limiter sets how brightly the LED lights</text>
+    </svg>
+  </figure>
+
+  <div class="measure">
+    <p><strong>The op-amp stage</strong> amplifies your guitar up to 8.5 times. Across its feedback resistor sits a light-dependent resistor sealed in a tube with an LED. Light it up and the resistance falls, and so does the gain: down to about 1.1 times. That's up to 18 dB of squeeze, built into the amplifier itself rather than added after it.</p>
+    <p><strong>The sidechain</strong> takes the op-amp's output, multiplies it by up to 10 depending on the Limiter knob, rectifies it and drives the LED. The louder you play, the brighter the LED, the lower the gain.</p>
+    <p><strong>The LM386</strong> is a tiny power-amp chip, more at home in a practice amp than a studio. It multiplies by 20 and runs out of room early, folding the top of the wave over softly and a little unevenly. That's the crunch the pedal makes on its own.</p>
+    <p><strong>Boost</strong> is just a volume control at the very end. It sets how hard you hit the amp and never changes the pedal's own drive.</p>
+    <p class="aside">There's no tone circuit at all. Apart from its coupling capacitors the pedal is flat from about 40 Hz to beyond 20 kHz. The weight and smoothness players describe comes from dynamics and harmonics, not EQ.</p>
+  </div>
+</section>
+
+<section id="why" aria-labelledby="h-why">
+  <h2 id="h-why">Why it feels so good under your fingers</h2>
+  <div class="measure">
+    <p>Follow one hard-picked chord through the pedal and the "controlled, squishy crunch" falls out of the timing.</p>
+  </div>
+
+  <div class="beats">
+    <div class="beat">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 220 110"><path d="M10 55 L28 12 L34 96 L40 20 L46 90 L52 26 L60 84 L70 32 L82 78 L96 38 L112 72 L130 42 L150 66 L172 47 L196 60 L210 55" fill="none" stroke="var(--ink)" stroke-width="2"/><rect x="24" y="4" width="16" height="102" fill="var(--opto)" opacity="0.14"/></svg>
+      </figure>
+      <div>
+        <div class="t">The first 4 milliseconds</div>
+        <h3>The pick gets through</h3>
+        <p>The light cell needs a few milliseconds to react, so the very front of each pick attack gets through before the squeeze arrives. You keep the snap and definition of each hit; it never sounds like a blanket thrown over the guitar.</p>
+      </div>
+    </div>
+    <div class="beat">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 220 110"><path d="M10 55 L28 12 L34 96 L40 32 L46 78 L54 36 L62 74 L72 38 L82 72 L94 38 L106 72 L118 39 L132 71 L146 40 L160 70 L176 41 L192 69 L210 42" fill="none" stroke="var(--ink)" stroke-width="2"/><path d="M40 6 H210" stroke="var(--opto)" stroke-width="3" stroke-dasharray="4 4"/></svg>
+      </figure>
+      <div>
+        <div class="t">The next half second</div>
+        <h3>The body gets held level</h3>
+        <p>Then the LED lights and the gain drops just enough to hold the chord at a steady level. Because the limiter listens to its own output, it backs off as it works: the harder it squeezes, the less it wants to. That gives a gentle, rounded curve rather than a hard ceiling, which is where the "squishy" comes from.</p>
+      </div>
+    </div>
+    <div class="beat">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 220 110"><path d="M10 55 C 40 10, 70 10, 100 55 S 160 100, 210 55" fill="none" stroke="var(--volt)" stroke-width="3"/><path d="M10 55 C 40 0, 70 0, 100 55 S 160 110, 210 55" fill="none" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="3 4"/></svg>
+      </figure>
+      <div>
+        <div class="t">All the time</div>
+        <h3>The clipping stays on a leash</h3>
+        <p>The LM386 starts clipping once the op-amp passes about 1.1 V. Turn the Limiter up and the op-amp is held below that line, so the chip saturates gently instead of buzzing. Gain decides how much crunch the pedal makes; Limiter decides how much of it you're allowed. That's the "controlled" part.</p>
+      </div>
+    </div>
+    <div class="beat">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 220 110"><path d="M10 40 H70 C 90 40, 100 80, 130 82 S 190 84, 210 85" fill="none" stroke="var(--opto)" stroke-width="3"/><text x="12" y="30" font-size="13" fill="var(--ink-soft)" font-family="Big Shoulders Text">squeeze</text></svg>
+      </figure>
+      <div>
+        <div class="t">After you stop</div>
+        <h3>The note blooms back</h3>
+        <p>Light cells let go slowly, and more slowly the longer they've been lit. As a chord rings out, the squeeze eases off over a few hundred milliseconds and the gain climbs back up, so the decaying note is lifted. Chords hang in the air longer, and that's the sustain.</p>
+      </div>
+    </div>
+    <div class="beat">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 220 110"><rect x="10" y="30" width="60" height="50" rx="6" fill="none" stroke="var(--ink)" stroke-width="2"/><path d="M70 55 H120" stroke="var(--ink)" stroke-width="2"/><rect x="120" y="20" width="90" height="70" rx="6" fill="var(--volt)" opacity="0.18" stroke="var(--volt)" stroke-width="2"/><text x="165" y="60" text-anchor="middle" font-size="18" font-family="Big Shoulders Text" font-weight="700" fill="var(--ink)">amp</text></svg>
+      </figure>
+      <div>
+        <div class="t">At the amp</div>
+        <h3>Your amp gets an even shove</h3>
+        <p>Here's why it works so well into an amp on the edge of breakup, like your Bella. The pedal hands it a signal that's up to 28 dB hotter and far more even than your guitar's. The amp's own breakup is then the same from hit to hit: every chord pushes it the same distance past clean. Ease off your guitar's volume and the whole chain cleans up together.</p>
+      </div>
+    </div>
+    <div class="beat">
+      <figure aria-hidden="true">
+        <svg viewBox="0 0 220 110"><path d="M10 70 C 60 70, 90 68, 120 62 C 140 40, 150 30, 160 62 C 175 80, 195 84, 210 86" fill="none" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="3 4"/><path d="M10 70 C 60 70, 90 68, 120 66 C 140 58, 150 56, 160 66 C 175 80, 195 84, 210 86" fill="none" stroke="var(--ink)" stroke-width="2.5"/></svg>
+      </figure>
+      <div>
+        <div class="t">Before any of it</div>
+        <h3>Your pickups get tamed</h3>
+        <p>The pedal's input is about 100k, a tenth of a typical amp's. That damps the bright resonant peak of a passive pickup by around 10 dB, taking the fizz off the top before any distortion happens. It's a subtle part of why the crunch sounds warm rather than spiky.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="controls" aria-labelledby="h-controls">
+  <h2 id="h-controls">Every dial and switch</h2>
+  <div class="measure"><p>The three knobs and footswitch on the pedal:</p></div>
+
+  <div class="controls">
+    <article class="control">
+      <h3>Gain <small>0 to 10</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>A 100k volume pot before the op-amp. It sets how much signal reaches both the light cell and the LM386.</dd>
+        <dt>What you hear</dt><dd>Low: clean and open. Middle: the limiter starts to breathe. High: the LM386 adds its own grit, and the limiter has the most to work with.</dd>
+        <dt>Tip</dt><dd>The Limiter does very little with Gain low. Raise them together.</dd>
+      </dl>
+    </article>
+    <article class="control">
+      <h3>Limiter <small>0 to 10</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>Sets the sidechain's gain from 0 to 10 on a log taper, so most of the action is in the top half of its travel.</dd>
+        <dt>What you hear</dt><dd>0: off, unless you hit it very hard with Gain full. 5: chords even out and sustain longer. 10: up to 15 dB of squash, thick and singing.</dd>
+        <dt>Tip</dt><dd>Watch the Opto window: a gentle glow on each chord is the sweet spot for rhythm.</dd>
+      </dl>
+    </article>
+    <article class="control">
+      <h3>Boost <small>0 to 10</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>A plain 1k volume pot after the LM386.</dd>
+        <dt>What you hear</dt><dd>Only level. It sets how hard you hit the amp, so it decides how much the amp breaks up, not the pedal.</dd>
+        <dt>Tip</dt><dd>Into an amp sim, 3 to 5 is often plenty. Full Boost is about 28 dB above your guitar.</dd>
+      </dl>
+    </article>
+    <article class="control">
+      <h3>Engage <small>footswitch</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>True bypass. Off returns your guitar untouched, with a short crossfade so it never clicks.</dd>
+        <dt>What you hear</dt><dd>The blue light means on. The Opto window shows the squeeze; the Clip window flashes when the LM386 runs out of room.</dd>
+      </dl>
+    </article>
+  </div>
+
+  <div class="measure board-head"><h3>Inside the box</h3><p>The green board under the pedal holds the things you'd set once with a screwdriver.</p></div>
+  <div class="controls">
+    <article class="control">
+      <h3>Supply <small>9 V or 12 V</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>The pedal runs on either. More volts give both chips more room to swing.</dd>
+        <dt>What you hear</dt><dd>12 V clips later and sounds a little cleaner and punchier with Gain high. 9 V crunches sooner.</dd>
+      </dl>
+    </article>
+    <article class="control">
+      <h3>Iso cap <small>open or fitted</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>A 10 µF capacitor across the LED. The board has a place for it, but the traced pedal left it empty.</dd>
+        <dt>What you hear</dt><dd>Open (stock): the LED flickers with each wave, adding a little grit to low notes when the Limiter is high. Fitted: smoother and a touch slower to react.</dd>
+      </dl>
+    </article>
+    <article class="control">
+      <h3>Pickup load <small>none, single coil, humbucker</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>Adds back the 100k load your pickups would see from the real pedal, which a recording interface's input doesn't provide.</dd>
+        <dt>What you hear</dt><dd>Humbucker: the top end softens around 2.5 to 3 kHz. Single coil: the same around 4 kHz. None: for active pickups or re-amped tracks.</dd>
+      </dl>
+    </article>
+    <article class="control">
+      <h3>Input ref <small>−12 to +12 dBV</small></h3>
+      <dl>
+        <dt>In the circuit</dt><dd>How many volts a full-scale digital sample stands for, so your DI hits the modelled circuit at a realistic level.</dd>
+        <dt>What you hear</dt><dd>Higher drives the circuit harder, like a hotter pickup. If it's too fizzy or too clean, adjust this before Boost.</dd>
+      </dl>
+    </article>
+  </div>
+</section>
+
+<section id="recipes" aria-labelledby="h-recipes">
+  <h2 id="h-recipes">Places to start</h2>
+  <div class="measure"><p>With an amp set almost clean, right on the edge of breakup. Each one loads into the scope at the top.</p></div>
+  <div class="recipes">
+    <div class="recipe">
+      <h3>Clean shove</h3>
+      <div class="settings"><span>Gain 4</span><span>Limiter 0</span><span>Boost 6</span></div>
+      <p>No squeeze at all, just a lot more level. Lets the amp do every bit of the breakup.</p>
+      <button type="button" data-g="4" data-l="0" data-b="6">Load into the scope</button>
+    </div>
+    <div class="recipe">
+      <h3>Rhythm squash</h3>
+      <div class="settings"><span>Gain 7</span><span>Limiter 5</span><span>Boost 6</span></div>
+      <p>Chords sit level and ring longer. The Opto window glows on each hit.</p>
+      <button type="button" data-g="7" data-l="5" data-b="6">Load into the scope</button>
+    </div>
+    <div class="recipe">
+      <h3>Singing lead</h3>
+      <div class="settings"><span>Gain 10</span><span>Limiter 8</span><span>Boost 6</span></div>
+      <p>Maximum sustain with the LM386's grit held in check. Single notes bloom as they fade.</p>
+      <button type="button" data-g="10" data-l="8" data-b="6">Load into the scope</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <h2>Where this comes from</h2>
+  <p class="measure">The circuit, part values and chips come from a schematic traced from a 2019 Storm. The light cell's behaviour, the chips' clipping shapes and the pickup models are estimates chosen to match datasheets and descriptions, not measurements of a real pedal. Tempest is an independent model; Storm, Schaffer Replica and SoloDallas are trademarks of their owners.</p>
+  <ul>
+    <li><a href="https://aionfx.com/app/files/docs/gale_documentation.pdf">Aion FX Gale documentation (traced schematic)</a></li>
+    <li><a href="https://docs.pedalpcb.com/project/ClosedCircuit.pdf">PedalPCB Closed Circuit documentation</a></li>
+    <li><a href="https://cdn.shopify.com/s/files/1/1584/0975/files/SD_Storm_Brochure_Final-2020-min.pdf">Storm brochure, 2020</a></li>
+    <li><a href="https://solodallas.com/blogs/news/tower-power">SoloDallas: Tower Power</a></li>
+    <li><a href="https://forward.com/culture/music/312469/kenny-schaffer-the-father-of-invention/">The Forward: Ken Schaffer interview</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Schaffer%E2%80%93Vega_diversity_system">Schaffer-Vega diversity system (Wikipedia)</a></li>
+    <li><a href="https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/5337/NSL-32_Rev.A_Aug.19,2021.pdf">NSL-32 light cell datasheet</a></li>
+  </ul>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+  const FS = 48000;
+
+  // ---------- The circuit model (a port of Source/TempestDSP.h, without oversampling) ----------
+  const P = {
+    rIn: 2e3, potGain: 100e3, rBias: 1e6, rGround: 2e3, cGround: 10e-6, rFeedback: 15e3,
+    rSideIn: 10e3, potLimiter: 100e3, rLed: 1e3, cCouple1: 1e-6, rPad1: 2e3, rPad2: 8.2e3, rPad3: 2e3,
+    cLm386In: 100e-9, rLm386In: 50e3, lm386Gain: 20, cOut: 10e-6, rOut: 10, potBoost: 1e3,
+    ldrOnOhms: 160, ldrOnAmps: 16e-3, ldrDark: 1e6, ldrSlope: 0.8
+  };
+  const darkGain = 1 + P.rFeedback / P.rGround;
+  const padLower = P.rPad3 * P.rLm386In / (P.rPad3 + P.rLm386In);
+  const pad = padLower / (P.rPad1 + P.rPad2 + padLower) * P.lm386Gain;
+  const rails = { op: 3.5, up: 3.3, down: 3.8 };
+
+  const gainDivider = (pos) => {
+    const lower = P.potGain * pos, upper = P.potGain - lower;
+    const loaded = lower * P.rBias / (lower + P.rBias);
+    return loaded / (P.rIn + upper + loaded);
+  };
+  const sideGain = (pos) => P.potLimiter * ((Math.pow(81, pos) - 1) / 80) / P.rSideIn;
+  const opClip = (x, l) => x / Math.pow(1 + Math.pow(Math.abs(x / l), 6), 1 / 6);
+  const lmClip = (x) => { const l = x >= 0 ? rails.up : rails.down; return x / Math.pow(1 + Math.pow(Math.abs(x / l), 2.5), 1 / 2.5); };
+  const softKnee = (v) => { const o = v / 0.07; return o > 30 ? v : 0.07 * Math.log1p(Math.exp(o)); };
+  const ledCurrent = (v) => softKnee(v - 1.7 - 0.5) / (P.rLed + 25);
+  const coef = (s) => 1 - Math.exp(-1 / (s * FS));
+
+  function highPass(hz) {
+    const k = Math.tan(Math.PI * hz / FS), a = (1 - k) / (1 + k);
+    let x1 = 0, y1 = 0;
+    return (x) => { const y = 0.5 * (1 + a) * (x - x1) + a * y1; x1 = x; y1 = y; return y; };
+  }
+
+  function run(input, knobs) {
+    const g = gainDivider(knobs.gain / 10), k = sideGain(knobs.limiter / 10), b = knobs.boost / 10;
+    const hpG = highPass(1 / (2 * Math.PI * P.rGround * P.cGround));
+    const hp1 = highPass(1 / (2 * Math.PI * P.cCouple1 * (P.rPad1 + P.rPad2 + P.rPad3)));
+    const hp2 = highPass(1 / (2 * Math.PI * P.cLm386In * P.rLm386In));
+    const hp3 = highPass(1 / (2 * Math.PI * P.cOut * (P.rOut + P.potBoost)));
+    const fa = coef(0.004), fr = coef(0.016), sa = coef(0.15), sr = coef(0.40);
+    let gf = 0, gs = 0, maxDrive = 0;
+    const out = new Float32Array(input.length), gr = new Float32Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const v = input[i] * g;
+      const rl = 1 / (gf + gs + 1 / P.ldrDark);
+      const rf = P.rFeedback * rl / (P.rFeedback + rl);
+      const v1 = opClip(v + rf / P.rGround * hpG(v), rails.op);
+      const bridge = Math.abs(v1 + opClip(k * v1, rails.op));
+      const amps = Math.min(ledCurrent(bridge), 10e-3);
+      const target = amps > 1e-7 ? Math.pow(amps / P.ldrOnAmps, P.ldrSlope) / P.ldrOnOhms : 0;
+      gf += (0.85 * target - gf) * (0.85 * target > gf ? fa : fr);
+      gs += (0.15 * target - gs) * (0.15 * target > gs ? sa : sr);
+      const u = hp2(hp1(v1)) * pad;
+      maxDrive = Math.max(maxDrive, Math.abs(u) / (u >= 0 ? rails.up : rails.down));
+      out[i] = hp3(lmClip(u)) * b;
+      gr[i] = 20 * Math.log10(darkGain / (1 + rf / P.rGround));
+    }
+    return { out, gr, maxDrive };
+  }
+
+  // ---------- A riff to play through it: plucked power chords, peaking near 0.5 V ----------
+  function makeRiff() {
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+    const len = Math.round(FS * 4.2), out = new Float32Array(len);
+    const A = 110, D = 146.83, G = 98, E = 82.41;
+    const hits = [[0, A, 1.4, 1], [1.5, A, 0.22, 0.7], [1.75, A, 0.22, 0.7], [2, D, 0.9, 1], [3, G, 1.2, 1]];
+    for (const [at, root, ring, vel] of hits) {
+      for (const ratio of [1, 1.4983, 2]) {
+        const f = root * ratio, n = Math.round(FS / f), line = new Float32Array(n);
+        for (let i = 0; i < n; i++) line[i] = rnd();
+        for (let p = 0; p < 8; p++) for (let i = 1; i < n; i++) line[i] = 0.5 * (line[i] + line[i - 1]);
+        const start = Math.round((at + (ratio === 1 ? 0 : ratio < 1.9 ? 0.012 : 0.024)) * FS);
+        const stop = Math.min(len, start + Math.round(ring * FS));
+        let idx = 0;
+        for (let s = start; s < stop; s++) {
+          const next = (idx + 1) % n, fade = Math.min(1, (stop - s) / (0.01 * FS));
+          out[s] += 0.4 * vel * fade * line[idx];
+          line[idx] = 0.4996 * (line[idx] + line[next]);
+          idx = next;
+        }
+      }
+    }
+    let peak = 0; for (const v of out) peak = Math.max(peak, Math.abs(v));
+    for (let i = 0; i < len; i++) out[i] *= 0.5 / peak;
+    return out;
+  }
+
+  const riff = makeRiff();
+  let result = null;
+
+  // ---------- Drawing ----------
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function fitCanvas(cv) {
+    const dpr = window.devicePixelRatio || 1, r = cv.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+    const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w: r.width, h: r.height };
+  }
+  function drawWave(cv, data, colour) {
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+    let peak = 1e-9; for (const v of data) peak = Math.max(peak, Math.abs(v));
+    ctx.strokeStyle = css("--scope-grid"); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+    ctx.fillStyle = colour;
+    const per = data.length / w;
+    for (let x = 0; x < w; x++) {
+      let lo = 0, hi = 0;
+      const a = Math.floor(x * per), bEnd = Math.min(data.length, Math.floor((x + 1) * per));
+      for (let i = a; i < bEnd; i++) { const v = data[i] / peak; if (v < lo) lo = v; if (v > hi) hi = v; }
+      ctx.fillRect(x, h / 2 - hi * (h / 2 - 3), 1, Math.max(1, (hi - lo) * (h / 2 - 3)));
+    }
+  }
+  function drawGr(cv, gr) {
+    const { ctx, w, h } = fitCanvas(cv);
+    ctx.clearRect(0, 0, w, h);
+    const max = 18;
+    ctx.strokeStyle = css("--scope-grid"); ctx.lineWidth = 1;
+    for (const db of [6, 12]) { const y = (db / max) * (h - 4) + 2; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    ctx.fillStyle = "#ff5a2e"; ctx.globalAlpha = 0.85;
+    const per = gr.length / w;
+    for (let x = 0; x < w; x++) {
+      let m = 0; const a = Math.floor(x * per), bEnd = Math.min(gr.length, Math.floor((x + 1) * per));
+      for (let i = a; i < bEnd; i++) m = Math.max(m, gr[i]);
+      ctx.fillRect(x, 2, 1, (m / max) * (h - 4));
+    }
+    ctx.globalAlpha = 1;
+  }
+  const crest = (d) => { let p = 0, s = 0; for (const v of d) { p = Math.max(p, Math.abs(v)); s += v * v; } return 20 * Math.log10(p / Math.sqrt(s / d.length)); };
+
+  // Static curve: steady output against input, for the current knobs.
+  function drawCurve(knobs) {
+    const svg = document.getElementById("curve");
+    const W = 280, H = 200, L = 34, R = 8, T = 10, B = 30;
+    const inLo = -50, inHi = -5, outLo = -30, outHi = 15;
+    const xs = (db) => L + (db - inLo) / (inHi - inLo) * (W - L - R);
+    const ys = (db) => T + (outHi - db) / (outHi - outLo) * (H - T - B);
+    const tone = new Float32Array(Math.round(FS * 0.35));
+    const pts = [];
+    for (let db = inLo; db <= inHi; db += 2.5) {
+      const amp = Math.pow(10, db / 20) * Math.SQRT2;
+      for (let i = 0; i < tone.length; i++) tone[i] = amp * Math.sin(2 * Math.PI * 220 * i / FS);
+      const { out } = run(tone, { ...knobs, boost: 10 });
+      let s = 0; const n0 = Math.round(tone.length * 0.6);
+      for (let i = n0; i < out.length; i++) s += out[i] * out[i];
+      const rms = Math.sqrt(s / (out.length - n0));
+      pts.push([xs(db), ys(Math.max(outLo, Math.min(outHi, 20 * Math.log10(rms))))]);
+    }
+    const grid = [];
+    for (let db = -50; db <= -10; db += 10) grid.push(`<line x1="${xs(db)}" y1="${T}" x2="${xs(db)}" y2="${H - B}" stroke="var(--scope-grid)"/><text x="${xs(db)}" y="${H - B + 14}" fill="#9fb0be" font-size="10" text-anchor="middle">${db}</text>`);
+    for (let db = -30; db <= 10; db += 10) grid.push(`<line x1="${L}" y1="${ys(db)}" x2="${W - R}" y2="${ys(db)}" stroke="var(--scope-grid)"/><text x="${L - 5}" y="${ys(db) + 3}" fill="#9fb0be" font-size="10" text-anchor="end">${db}</text>`);
+    // Where the output would sit with no limiting and no clipping.
+    const lin = 20 * Math.log10(Math.max(1e-6, gainDivider(knobs.gain / 10) * darkGain * pad));
+    const xEnd = Math.min(inHi, outHi - lin);
+    const unity = `<line x1="${xs(inLo)}" y1="${ys(Math.max(outLo, inLo + lin))}" x2="${xs(xEnd)}" y2="${ys(xEnd + lin)}" stroke="#9fb0be" stroke-dasharray="3 4"/>`;
+    svg.innerHTML = `<g font-family="Big Shoulders Text, sans-serif">${grid.join("")}${unity}
+      <polyline points="${pts.map(p => p.join(",")).join(" ")}" fill="none" stroke="#ff6a3d" stroke-width="2.5"/>
+      <text x="${(L + W - R) / 2}" y="${H - 2}" fill="#b9c5cf" font-size="11" text-anchor="middle">level in (dBV)</text>
+      <text x="10" y="${(T + H - B) / 2}" fill="#b9c5cf" font-size="11" text-anchor="middle" transform="rotate(-90 10 ${(T + H - B) / 2})">level out, Boost full</text></g>`;
+  }
+
+  // ---------- Wiring ----------
+  const el = (id) => document.getElementById(id);
+  const knobsNow = () => ({ gain: +el("kGain").value, limiter: +el("kLim").value, boost: +el("kBoost").value });
+  let pending = 0;
+
+  function update() {
+    const k = knobsNow();
+    el("oGain").textContent = k.gain.toFixed(1);
+    el("oLim").textContent = k.limiter.toFixed(1);
+    el("oBoost").textContent = k.boost.toFixed(1);
+    result = run(riff, k);
+    drawWave(el("cvIn"), riff, "#9fb0be");
+    drawWave(el("cvOut"), result.out, "#dfe6ec");
+    drawGr(el("cvGr"), result.gr);
+    let grMax = 0; for (const v of result.gr) grMax = Math.max(grMax, v);
+    el("crestIn").textContent = `peak-to-average ${crest(riff).toFixed(1)} dB`;
+    el("crestOut").textContent = `peak-to-average ${crest(result.out).toFixed(1)} dB`;
+    el("grMax").textContent = `up to ${grMax.toFixed(1)} dB`;
+    el("optoTxt").textContent = `${grMax.toFixed(0)} dB`;
+    const glow = Math.min(1, grMax / 14);
+    el("lampOpto").style.background = `color-mix(in srgb, #ff4a1c ${Math.round(15 + 85 * glow)}%, #2a1310)`;
+    el("lampOpto").style.boxShadow = glow > 0.05 ? `0 0 ${6 + 14 * glow}px rgba(255,90,46,${0.3 + 0.5 * glow})` : "none";
+    const clip = Math.max(0, Math.min(1, (result.maxDrive - 0.75) / 0.6));
+    el("lampClip").style.background = `color-mix(in srgb, #5b9bff ${Math.round(10 + 90 * clip)}%, #0f1d33)`;
+    el("lampClip").style.boxShadow = clip > 0.05 ? `0 0 ${6 + 14 * clip}px rgba(91,155,255,${0.3 + 0.5 * clip})` : "none";
+    drawCurve(k);
+  }
+  const schedule = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(update); };
+  for (const id of ["kGain", "kLim", "kBoost"]) el(id).addEventListener("input", schedule);
+  window.addEventListener("resize", schedule);
+
+  for (const btn of document.querySelectorAll(".recipe button")) {
+    btn.addEventListener("click", () => {
+      el("kGain").value = btn.dataset.g; el("kLim").value = btn.dataset.l; el("kBoost").value = btn.dataset.b;
+      update();
+      el("rig").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+    });
+  }
+
+  // ---------- Listening ----------
+  let audio = null, source = null;
+  function play(which, btn) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { btn.textContent = "Audio unavailable"; return; }
+    if (source) { try { source.stop(); } catch (e) {} source = null; }
+    const wasOn = btn.getAttribute("aria-pressed") === "true";
+    for (const b of document.querySelectorAll(".listen button")) b.setAttribute("aria-pressed", "false");
+    if (wasOn) return;
+    const data = which === "dry" ? riff : result.out;
+    let peak = 1e-9; for (const v of data) peak = Math.max(peak, Math.abs(v));
+    let rms = 0; for (const v of data) rms += v * v; rms = Math.sqrt(rms / data.length);
+    let dryRms = 0; for (const v of riff) dryRms += v * v; dryRms = Math.sqrt(dryRms / riff.length);
+    // Match loudness to the dry riff, then keep peaks under full scale.
+    const scale = Math.min(0.9 / peak, (dryRms * 1.6) / rms);
+    const buf = audio.createBuffer(1, data.length, FS), ch = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) ch[i] = data[i] * scale;
+    source = audio.createBufferSource(); source.buffer = buf; source.connect(audio.destination);
+    source.onended = () => btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-pressed", "true");
+    source.start();
+  }
+  el("playDry").addEventListener("click", (e) => play("dry", e.currentTarget));
+  el("playWet").addEventListener("click", (e) => play("wet", e.currentTarget));
+
+  update();
+})();
+</script>
+</body>
+</html>
