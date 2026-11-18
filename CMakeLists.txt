@@ -19,7 +19,7 @@ set(JUCE_DIR "${JUCE_DIR_DEFAULT}" CACHE PATH "Path to a JUCE 9 checkout")
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
 
 juce_add_plugin(Tempest
-    COMPANY_NAME "Nick Cox"
+    COMPANY_NAME "Independent Audio"
     PLUGIN_MANUFACTURER_CODE Ncox
     PLUGIN_CODE Tmpt
     FORMATS VST3 AU Standalone

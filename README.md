@@ -13,6 +13,10 @@ Sighs' JUCE checkout by default.
 
 For why it sounds the way it does, with an interactive scope running the model, open [tempest-explained.html](tempest-explained.html) in a browser.
 
+## Download
+
+Prebuilt for macOS 12 or later, on Apple silicon and Intel. Get the zip from the [latest release](https://github.com/nickdc8/tempest/releases/latest). It contains the VST3, the Audio Unit and the standalone app, and the release notes have the install steps.
+
 ## Install locations
 
 Building installs the plugins automatically:
